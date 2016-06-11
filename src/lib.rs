@@ -67,6 +67,16 @@ pub enum ExecOption {
     ExecNotEmptyAtStart = 0x10000000
 }
 
+/// In the general case, we don't care what the error was,
+/// but if [exec_from_with_options()](struct.Pcre.html#method.exec_from_with_options)
+/// was called with ExecPartialSoft or ExecPartialHard, we *do* want to know
+/// if the call failed with a partial match.
+#[derive(Clone, Debug)]
+pub enum ExecError {
+    PartialMatch,
+    GeneralError
+}
+
 #[allow(non_upper_case_globals)]
 pub const ExecPartial: ExecOption = ExecOption::ExecPartialSoft;
 #[allow(non_upper_case_globals)]
@@ -120,6 +130,11 @@ pub struct Match<'a> {
 }
 
 /// Iterator type for iterating matches within a subject string.
+///
+/// Partial matches are unsupported, even if the iterator was created by
+/// passing ExecPartialSoft or ExecPartialHard to
+/// [matches_with_options()](struct.Pcre.html#method.matches_with_options),
+/// since next() must return an `Option`, not a `Result`.
 pub struct MatchIterator<'a, 'p> {
 
     code: *const detail::pcre,
@@ -390,7 +405,7 @@ impl Pcre {
     /// If a regular expression will be used often, it might be worth studying it to possibly
     /// speed up matching. See the [study()](#method.study) method.
     #[inline]
-    pub fn exec<'a, 'p>(&'p mut self, subject: &'a str) -> Option<Match<'a>> {
+    pub fn exec<'a, 'p>(&'p mut self, subject: &'a str) -> Result<Match<'a>, ExecError> {
         self.exec_from(subject, 0)
     }
 
@@ -411,7 +426,7 @@ impl Pcre {
     /// If a regular expression will be used often, it might be worth studying it to possibly
     /// speed up matching. See the [study()](#method.study) method.
     #[inline]
-    pub fn exec_from<'a, 'p>(&'p mut self, subject: &'a str, startoffset: usize) -> Option<Match<'a>> {
+    pub fn exec_from<'a, 'p>(&'p mut self, subject: &'a str, startoffset: usize) -> Result<Match<'a>, ExecError> {
         let no_options: EnumSet<ExecOption> = EnumSet::new();
         self.exec_from_with_options(subject, startoffset, &no_options)
     }
@@ -436,7 +451,7 @@ impl Pcre {
     /// If a regular expression will be used often, it might be worth studying it to possibly
     /// speed up matching. See the [study()](#method.study) method.
     #[inline]
-    pub fn exec_from_with_options<'a, 'p>(&'p mut self, subject: &'a str, startoffset: usize, options: &EnumSet<ExecOption>) -> Option<Match<'a>> {
+    pub fn exec_from_with_options<'a, 'p>(&'p mut self, subject: &'a str, startoffset: usize, options: &EnumSet<ExecOption>) -> Result<Match<'a>, ExecError> {
         let ovecsize = (self.capture_count_ + 1) * 3;
         let mut ovector = vec![0 as c_int; ovecsize as usize];
 
@@ -450,13 +465,15 @@ impl Pcre {
                                        ovector.as_mut_ptr(),
                                        ovecsize as c_int);
             if rc >= 0 {
-                Some(Match {
+                Ok(Match {
                     subject: subject,
                     partial_ovector: ovector[..(((self.capture_count_ + 1) * 2) as usize)].to_vec(),
-                    string_count_: rc
+                    string_count_: rc,
                 })
+            } else if rc == libpcre_sys::PCRE_ERROR_PARTIAL {
+                Err(ExecError::PartialMatch)
             } else {
-                None
+                Err(ExecError::GeneralError)
             }
         }
     }

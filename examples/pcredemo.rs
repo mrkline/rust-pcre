@@ -112,12 +112,12 @@ fn main() {
 
     let opt_m = re.exec(&subject);
     let m = match opt_m {
-        None => {
+        Err(_) => {
             println!("No match");
             //env::set_exit_status(1);
             return;
         }
-        Some(m) => m
+        Ok(m) => m
     };
     print_match(&m, &name_table);
 
@@ -126,11 +126,11 @@ fn main() {
         loop {
             let opt_m = re.exec_from(&subject, start_offset);
             let m = match opt_m {
-                None => {
+                Err(_) => {
                     println!("\nNo more matches");
                     return;
                 }
-                Some(m) => m
+                Ok(m) => m
             };
 
             println!("");

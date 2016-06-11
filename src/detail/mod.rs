@@ -9,7 +9,7 @@
 use enum_set::{EnumSet};
 use libc::{c_char, c_int, c_uchar, c_void};
 use libpcre_sys;
-pub use libpcre_sys::{pcre, compile_options, exec_options, fullinfo_field, study_options, PCRE_UTF8, PCRE_NO_UTF8_CHECK, PCRE_ERROR_NOMATCH, PCRE_ERROR_NULL};
+pub use libpcre_sys::{pcre, compile_options, exec_options, fullinfo_field, study_options, PCRE_UTF8, PCRE_NO_UTF8_CHECK, PCRE_ERROR_NOMATCH, PCRE_ERROR_NULL, PCRE_ERROR_PARTIAL};
 use std::ffi::{CStr};
 use std::ptr;
 use std::result::{Result};
@@ -50,7 +50,7 @@ pub unsafe fn pcre_exec(code: *const pcre, extra: *const ::PcreExtra, subject: *
     let rc = libpcre_sys::pcre_exec(code, extra, subject, length, startoffset, converted_options, ovector, ovecsize);
     if rc == PCRE_ERROR_NOMATCH {
         return -1;
-    } else if rc < 0 && rc != PCRE_ERROR_NULL {
+    } else if rc < 0 && rc != PCRE_ERROR_NULL && rc != PCRE_ERROR_PARTIAL {
         panic!("pcre_exec");
     }
 

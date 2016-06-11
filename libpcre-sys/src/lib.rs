@@ -28,6 +28,7 @@ pub const PCRE_NO_UTF8_CHECK: c_int = 0x00002000;
 
 pub const PCRE_ERROR_NOMATCH: c_int = -1;
 pub const PCRE_ERROR_NULL: c_int = -2;
+pub const PCRE_ERROR_PARTIAL: c_int = -12;
 
 pub const PCRE_INFO_CAPTURECOUNT: fullinfo_field = 2;
 pub const PCRE_INFO_NAMEENTRYSIZE: fullinfo_field = 7;

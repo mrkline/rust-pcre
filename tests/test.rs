@@ -2,7 +2,7 @@ extern crate enum_set;
 extern crate pcre;
 
 use enum_set::{EnumSet};
-use pcre::{CompileOption, Pcre, StudyOption};
+use pcre::{CompileOption, Pcre, StudyOption, ExecOption, ExecError};
 
 #[test]
 #[should_panic]
@@ -40,7 +40,7 @@ fn test_exec_basic() {
 #[test]
 fn test_exec_no_match() {
     let mut re = Pcre::compile("abc").unwrap();
-    assert!(re.exec("def").is_none());
+    assert!(re.exec("def").is_err());
 }
 
 #[test]
@@ -148,7 +148,7 @@ fn test_extra_mark() {
 
     // Now execute and we should be able to get the mark
     let opt_m1 = re.exec(subject1);
-    assert!(opt_m1.is_some());
+    assert!(opt_m1.is_ok());
 
     // It should match XY 
     let m1 = opt_m1.unwrap();
@@ -160,7 +160,7 @@ fn test_extra_mark() {
     assert_eq!(mark1.unwrap(), "A");
 
     let opt_m2 = re.exec(subject2);
-    assert!(opt_m2.is_some());
+    assert!(opt_m2.is_ok());
 
     let m2 = opt_m2.unwrap();
     // It should match XZ
@@ -180,4 +180,18 @@ fn test_optional_capture() {
     // That might come out as a surprise.
     assert_eq!(m1.group_start(1), usize::max_value());  // c_int -1
     assert_eq!(m1.group_end(1), usize::max_value());  // c_int -1
+}
+
+#[test]
+fn test_partial_capture() {
+    let mut re = Pcre::compile("foobar").unwrap();
+    let mut subject = "foo";
+    let mut opts : EnumSet<ExecOption> = EnumSet::new();
+    opts.insert(ExecOption::ExecPartialHard);
+    match re.exec_from_with_options(subject, 0, &opts) {
+        Err(ExecError::PartialMatch) => (),
+        _ => panic!("Partial match test failed")
+    }
+    subject = "foobar";
+    assert!(re.exec_from_with_options(subject, 0, &opts).is_ok());
 }
