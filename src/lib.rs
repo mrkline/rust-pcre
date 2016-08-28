@@ -10,6 +10,8 @@ extern crate enum_set;
 extern crate libc;
 extern crate libpcre_sys;
 
+mod detail;
+
 use enum_set::{CLike, EnumSet};
 use libc::{c_char, c_int, c_uchar, c_void};
 use std::collections::{BTreeMap};
@@ -20,8 +22,7 @@ use std::ptr;
 use std::result::{Result};
 use std::string::{String};
 use std::vec::{Vec};
-
-mod detail;
+pub use detail::ExecError;
 
 #[derive(Clone)]
 pub enum CompileOption {
@@ -65,16 +66,6 @@ pub enum ExecOption {
     ExecNoStartOptimise = 0x04000000,
     ExecPartialHard = 0x08000000,
     ExecNotEmptyAtStart = 0x10000000
-}
-
-/// In the general case, we don't care what the error was,
-/// but if [exec_from_with_options()](struct.Pcre.html#method.exec_from_with_options)
-/// was called with ExecPartialSoft or ExecPartialHard, we *do* want to know
-/// if the call failed with a partial match.
-#[derive(Clone, Debug)]
-pub enum ExecError {
-    PartialMatch,
-    GeneralError
 }
 
 #[allow(non_upper_case_globals)]
@@ -464,17 +455,12 @@ impl Pcre {
                                        options,
                                        ovector.as_mut_ptr(),
                                        ovecsize as c_int);
-            if rc >= 0 {
-                Ok(Match {
-                    subject: subject,
-                    partial_ovector: ovector[..(((self.capture_count_ + 1) * 2) as usize)].to_vec(),
-                    string_count_: rc,
-                })
-            } else if rc == libpcre_sys::PCRE_ERROR_PARTIAL {
-                Err(ExecError::PartialMatch)
-            } else {
-                Err(ExecError::GeneralError)
-            }
+            rc.map(|ret| {
+                Match { subject: subject,
+                        partial_ovector: ovector[..(((self.capture_count_ + 1) * 2) as usize)].to_vec(),
+                        string_count_: ret,
+                }
+            })
         }
     }
 
@@ -707,18 +693,16 @@ impl<'a, 'p> Iterator for MatchIterator<'a, 'p> {
                                        &self.options,
                                        self.ovector.as_mut_ptr(),
                                        self.ovector.len() as c_int);
-            if rc >= 0 {
+            rc.map(|ret| {
                 // Update the iterator state.
                 self.offset = self.ovector[1];
 
-                Some(Match {
+                Match {
                     subject: self.subject,
                     partial_ovector: self.ovector[..(((self.capture_count + 1) * 2) as usize)].to_vec(),
-                    string_count_: rc
-                })
-            } else {
-                None
-            }
+                    string_count_: ret
+                }
+            }).ok()
         }
     }
 }

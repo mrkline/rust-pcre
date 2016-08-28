@@ -9,11 +9,83 @@
 use enum_set::{EnumSet};
 use libc::{c_char, c_int, c_uchar, c_void};
 use libpcre_sys;
-pub use libpcre_sys::{pcre, compile_options, exec_options, fullinfo_field, study_options, PCRE_UTF8, PCRE_NO_UTF8_CHECK, PCRE_ERROR_NOMATCH, PCRE_ERROR_NULL, PCRE_ERROR_PARTIAL};
+pub use libpcre_sys::{pcre, compile_options, exec_options, fullinfo_field, study_options, PCRE_UTF8, PCRE_NO_UTF8_CHECK};
 use std::ffi::{CStr};
 use std::ptr;
 use std::result::{Result};
 use std::string::{String};
+
+#[derive(Copy, Clone, Debug)]
+pub enum ExecError {
+    /// No match was found.
+    NoMatch,
+    /// The match limit was hit.
+    MatchLimit,
+    /// A partial match was found.
+    /// Try matching on a longer string, if available.
+    PartialMatch,
+    /// The recursion limit was hit while matching the given input.
+    RecursionLimit,
+    /// A bad `startoffset` value was provided.
+    BadOffset,
+    /// The input ended with a partial UTF-8 character
+    ShortUtf8,
+    /// The given pattern loops recursively.
+    RecursionLoop,
+    /// The JIT processor ran out of stack space.
+    JustInTimeStackLimit,
+}
+
+/// Translates raw PCRE error codes to ExecError,
+/// and panics on ones we should never encounter
+fn translate_error(pcre_err: c_int) -> ExecError {
+    use libpcre_sys::*;
+
+    match pcre_err{
+        PCRE_ERROR_NOMATCH => ExecError::NoMatch,
+        PCRE_ERROR_NULL => panic!("Internal rust-pcre error: null argument"),
+        PCRE_ERROR_BADOPTION => panic!("Internal rust-pcre error: bad option"),
+        PCRE_ERROR_BADMAGIC => panic!("Internal rust-pcre error: bad magic number (memory issue?)"),
+        PCRE_ERROR_UNKNOWN_OPCODE => panic!("Internal rust-pcre error: unknown opcode"),
+        // Issued when malloc fails *or* when ovector is bad in pcre_exec().
+        // The second case is more likely and a bug in our library, so panic.
+        PCRE_ERROR_NOMEMORY => panic!("Internal rust-pcre error: Insufficient ovector"),
+        // According to `man pcreapi`, this is only issued from pcre_*_substring
+        // functions, and we never call any of them.
+        PCRE_ERROR_NOSUBSTRING => panic!("PCRE_ERROR_NOSUBSTRING"),
+        PCRE_ERROR_MATCHLIMIT => ExecError::MatchLimit,
+        // We don't use utilize callbacks,
+        // and pcre_exec() never returns this itself.
+        PCRE_ERROR_CALLOUT => panic!("PCRE_ERROR_CALLOUT"),
+        // str is assumed to be valid UTF8.
+        PCRE_ERROR_BADUTF8 => panic!("libpcre was given invalid UTF-8"),
+        // Since we provide PCRE_NO_UTF8_CHECK, we should never get this either.
+        PCRE_ERROR_BADUTF8_OFFSET => panic!("libpcre was given an invalid UTF-8 offset"),
+        PCRE_ERROR_PARTIAL => ExecError::PartialMatch,
+        // According to PCRE docs, this is no longer used.
+        PCRE_ERROR_BADPARTIAL => panic!("PCRE_ERROR_BADPARTIAL"),
+        // Should we panic if PCRE has an internal problem?
+        // For now, assume the answer is yes.
+        PCRE_ERROR_INTERNAL => panic!("libpcre internal error"),
+        // Issued if ovecsize is negative, which we ensure
+        PCRE_ERROR_BADCOUNT => panic!("Internal rust-pcre error: negative ovecsize"),
+        PCRE_ERROR_RECURSIONLIMIT => ExecError::RecursionLimit,
+        // Issued when a bad combo of PCRE_NEWLINE_* options are given
+        PCRE_ERROR_BADNEWLINE => panic!("Internal rust-pcre error: bad option"),
+        PCRE_ERROR_SHORTUTF8 => ExecError::ShortUtf8,
+        PCRE_ERROR_RECURSELOOP => ExecError::RecursionLoop,
+        PCRE_ERROR_JIT_STACKLIMIT => ExecError::JustInTimeStackLimit,
+        // Occurs if an 8-bit pattern is passed to a 32-bit library, etc.
+        PCRE_ERROR_BADMODE => panic!("Internal rust-pcre error: bad mode"),
+        PCRE_ERROR_BADENDIANNESS => panic!("Internal rust-pcre error: bad endianness"),
+        // Length is taken from str::len(), so it won't be negative.
+        PCRE_ERROR_BADLENGTH => panic!("Internal rust-pcre error: bad length"),
+        // Returned from pcre_fullinfo() if we called it without correct params
+        PCRE_ERROR_UNSET => panic!("Internal rust-pcre error: pcre info unset"),
+
+        _ => panic!("Unkown error code")
+    }
+}
 
 pub unsafe fn pcre_compile(pattern: *const c_char, options: &EnumSet<::CompileOption>, tableptr: *const c_uchar) -> Result<*mut pcre, (Option<String>, c_int)> {
     assert!(!pattern.is_null());
@@ -43,18 +115,16 @@ pub unsafe fn pcre_compile(pattern: *const c_char, options: &EnumSet<::CompileOp
     }
 }
 
-pub unsafe fn pcre_exec(code: *const pcre, extra: *const ::PcreExtra, subject: *const c_char, length: c_int, startoffset: c_int, options: &EnumSet<::ExecOption>, ovector: *mut c_int, ovecsize: c_int) -> c_int {
+pub unsafe fn pcre_exec(code: *const pcre, extra: *const ::PcreExtra, subject: *const c_char, length: c_int, startoffset: c_int, options: &EnumSet<::ExecOption>, ovector: *mut c_int, ovecsize: c_int) ->  Result<c_int, ExecError> {
     assert!(!code.is_null());
     assert!(ovecsize >= 0 && ovecsize % 3 == 0);
     let converted_options = options.iter().fold(0, |converted_options, option| converted_options | (option as compile_options)) | PCRE_NO_UTF8_CHECK;
     let rc = libpcre_sys::pcre_exec(code, extra, subject, length, startoffset, converted_options, ovector, ovecsize);
-    if rc == PCRE_ERROR_NOMATCH {
-        return -1;
-    } else if rc < 0 && rc != PCRE_ERROR_NULL && rc != PCRE_ERROR_PARTIAL {
-        panic!("pcre_exec");
+    if rc >= 0 {
+        Ok(rc)
+    } else {
+        Err(translate_error(rc)) // Will panic as needed
     }
-
-    rc
 }
 
 pub unsafe fn pcre_free(ptr: *mut c_void) {
@@ -68,8 +138,9 @@ pub unsafe fn pcre_free_study(extra: *mut ::PcreExtra) {
 pub unsafe fn pcre_fullinfo(code: *const pcre, extra: *const ::PcreExtra, what: fullinfo_field, where_: *mut c_void) {
     assert!(!code.is_null());
     let rc = libpcre_sys::pcre_fullinfo(code, extra, what, where_);
-    if rc < 0 && rc != PCRE_ERROR_NULL {
-        panic!("pcre_fullinfo");
+    if rc < 0 {
+        translate_error(rc); // Should panic
+        unreachable!("translate_error didn't panic on an internal error.")
     }
 }
 
