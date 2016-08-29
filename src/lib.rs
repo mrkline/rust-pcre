@@ -67,11 +67,6 @@ pub enum ExecOption {
     ExecNotEmptyAtStart = 0x10000000
 }
 
-#[allow(non_upper_case_globals)]
-pub const ExecPartial: ExecOption = ExecOption::ExecPartialSoft;
-#[allow(non_upper_case_globals)]
-pub const ExecNoStartOptimize: ExecOption = ExecOption::ExecNoStartOptimise;
-
 #[derive(Copy, Clone, Debug)]
 pub enum StudyOption {
     StudyJitCompile = 0x0001,
