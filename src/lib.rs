@@ -23,7 +23,7 @@ use std::vec::{Vec};
 
 mod detail;
 
-#[derive(Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum CompileOption {
     Caseless = 0x00000001,
     Multiline = 0x00000002,
@@ -48,7 +48,7 @@ pub enum CompileOption {
     Ucp = 0x20000000
 }
 
-#[derive(Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum ExecOption {
     ExecAnchored = 0x00000010,
     ExecNotBol = 0x00000080,
@@ -72,7 +72,7 @@ pub const ExecPartial: ExecOption = ExecOption::ExecPartialSoft;
 #[allow(non_upper_case_globals)]
 pub const ExecNoStartOptimize: ExecOption = ExecOption::ExecNoStartOptimise;
 
-#[derive(Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum StudyOption {
     StudyJitCompile = 0x0001,
     StudyJitPartialSoftCompile = 0x0002,
