@@ -135,6 +135,15 @@ pub struct MatchIterator<'a, 'p> {
 
 }
 
+// Under normal circumstances, CLike would use std::transmute to convert
+// a u32 to the enum, and a simple cast to convert the enum to a u32.
+// This doesn't work here since the enum values match the ones expected
+// by libpcre (so that they can be folded together into the appropriate bitmask
+// before making the C calls).
+//
+// A better, more efficient solution might be to use the bitflags macro instead.
+// (see https://doc.rust-lang.org/bitflags/bitflags/macro.bitflags!.html)
+
 impl CLike for CompileOption {
     unsafe fn from_u32(n: u32) -> CompileOption {
         use CompileOption::*;
