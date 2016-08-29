@@ -24,6 +24,22 @@ use std::string::{String};
 use std::vec::{Vec};
 pub use detail::ExecError;
 
+impl std::fmt::Display for ExecError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use ExecError::*;
+        match *self {
+            NoMatch => write!(f, "no match was found"),
+            MatchLimit => write!(f, "the match limit was hit"),
+            PartialMatch => write!(f, "a partial match was found (try matching a longer input)"),
+            RecursionLimit => write!(f, "the recursion limit was hit while matching"),
+            BadOffset => write!(f, "the starting offset did not lie on a UTF-8 character boundary"),
+            ShortUtf8 => write!(f, "the input ended midway through a UTF-8 character (try matching a longer input)"),
+            RecursionLoop => write!(f, "the given pattern loops recursively"),
+            JustInTimeStackLimit => write!(f, "the JIT system ran out of stack space"),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum CompileOption {
     Caseless = 0x00000001,
